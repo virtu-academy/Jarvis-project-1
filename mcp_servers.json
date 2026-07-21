@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "higgsfield": {
+      "enabled": false,
+      "transport": "http",
+      "url": "https://REPLACE-WITH-HIGGSFIELD-MCP-ENDPOINT/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE-WITH-YOUR-HIGGSFIELD-KEY"
+      },
+      "_note": "Placeholder — fill in the real Higgsfield MCP endpoint + key when available, then set enabled: true."
+    },
+    "example-local-stdio-server": {
+      "enabled": false,
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"],
+      "_note": "Example of a local stdio MCP server. Any MCP server works — Jarvis discovers its tools automatically."
+    }
+  }
+}

@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Jarvis long-term memory (personal data — keep local)
+jarvis_memory.json
+
+# Whisper model cache / audio scratch
+*.wav
+*.mp3
+.models/

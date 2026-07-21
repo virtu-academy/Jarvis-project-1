@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root {
+    --bg: #04080d;
+    --panel: rgba(10, 25, 38, 0.72);
+    --line: rgba(64, 196, 255, 0.18);
+    --cyan: #40c4ff;
+    --dim: #6d8aa0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 35% 45%, #0a1622 0%, var(--bg) 65%);
+    color: #cfe8f7;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    overflow: hidden;
+    display: flex;
+  }
+  #stage { flex: 1; position: relative; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #status {
+    position: absolute; left: 50%; bottom: 12%;
+    transform: translateX(-50%);
+    letter-spacing: 0.55em; text-indent: 0.55em;
+    font-size: 13px; color: var(--cyan);
+    text-transform: uppercase; opacity: 0.9;
+    text-shadow: 0 0 12px rgba(64,196,255,.6);
+    transition: color .4s;
+  }
+  #title {
+    position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; letter-spacing: 0.9em; text-indent: 0.9em;
+    color: rgba(160, 215, 245, 0.85);
+  }
+  #transcript {
+    width: 340px; height: 100%;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    backdrop-filter: blur(6px);
+    display: flex; flex-direction: column;
+  }
+  #transcript header {
+    padding: 18px 20px 12px;
+    font-size: 10px; letter-spacing: 0.35em;
+    color: var(--dim); border-bottom: 1px solid var(--line);
+  }
+  #log { flex: 1; overflow-y: auto; padding: 14px 18px; scrollbar-width: thin; }
+  .msg { margin-bottom: 14px; font-size: 12.5px; line-height: 1.55; animation: fade .3s ease; }
+  .msg .who { font-size: 9.5px; letter-spacing: 0.25em; margin-bottom: 3px; }
+  .msg.user .who { color: #ffd180; }
+  .msg.jarvis .who { color: var(--cyan); }
+  .msg.tool { font-size: 11px; color: #80cbc4; opacity: .85; }
+  .msg.user  { color: #f3e5cf; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } }
+  .cursor { display: inline-block; width: 7px; height: 13px; background: var(--cyan);
+            vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #conn { position: absolute; top: 26px; right: 360px; font-size: 10px;
+          letter-spacing: .3em; color: var(--dim); }
+  #conn.online { color: #69f0ae; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="title">J &nbsp;A &nbsp;R &nbsp;V &nbsp;I &nbsp;S</div>
+    <div id="status">OFFLINE</div>
+    <div id="conn">LINK ▲</div>
+  </div>
+  <div id="transcript">
+    <header>TRANSCRIPT</header>
+    <div id="log"></div>
+  </div>
+
+<script>
+"use strict";
+/* ---------------- state ---------------- */
+const STATES = {
+  idle:      { label: "STANDING BY", color: [64, 150, 200],  energy: 0.25, spin: 0.4 },
+  listening: { label: "LISTENING",   color: [0, 229, 255],   energy: 0.55, spin: 0.8 },
+  thinking:  { label: "PROCESSING",  color: [255, 179, 0],   energy: 0.85, spin: 2.6 },
+  speaking:  { label: "SPEAKING",    color: [64, 196, 255],  energy: 1.0,  spin: 1.2 },
+};
+let state = "idle";
+let cur = { color: [...STATES.idle.color], energy: 0.25, spin: 0.4 };
+
+const statusEl = document.getElementById("status");
+function setState(s) {
+  if (!STATES[s]) return;
+  state = s;
+  statusEl.textContent = STATES[s].label;
+}
+
+/* ---------------- transcript ---------------- */
+const log = document.getElementById("log");
+let streamEl = null;
+
+function addMsg(cls, who, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.innerHTML = who ? `<div class="who">${who}</div><span class="body"></span>` : `<span class="body"></span>`;
+  div.querySelector(".body").textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function handleEvent(ev) {
+  switch (ev.type) {
+    case "state": setState(ev.state); break;
+    case "user":
+      endStream();
+      addMsg("user", "YOU", ev.text);
+      break;
+    case "delta": {
+      if (!streamEl) {
+        streamEl = addMsg("jarvis", "JARVIS", "");
+        const c = document.createElement("span");
+        c.className = "cursor";
+        streamEl.appendChild(c);
+      }
+      streamEl.querySelector(".body").textContent += ev.text;
+      log.scrollTop = log.scrollHeight;
+      break;
+    }
+    case "jarvis": // full message (history replay)
+      endStream();
+      addMsg("jarvis", "JARVIS", ev.text);
+      break;
+    case "jarvis_done": endStream(); break;
+    case "tool":
+      endStream();
+      addMsg("tool", "", "⚙ engaging tool: " + ev.name);
+      break;
+  }
+}
+function endStream() {
+  if (streamEl) { const c = streamEl.querySelector(".cursor"); if (c) c.remove(); streamEl = null; }
+}
+
+/* ---------------- websocket ---------------- */
+const conn = document.getElementById("conn");
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { conn.textContent = "LINK ● ONLINE"; conn.classList.add("online"); setState("idle"); };
+  ws.onmessage = (m) => handleEvent(JSON.parse(m.data));
+  ws.onclose = () => {
+    conn.textContent = "LINK ▲ RECONNECTING"; conn.classList.remove("online");
+    statusEl.textContent = "OFFLINE";
+    setTimeout(connect, 1500);
+  };
+}
+connect();
+
+/* ---------------- arc reactor ---------------- */
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W, H, CX, CY, R;
+function resize() {
+  W = cv.width = cv.clientWidth * devicePixelRatio;
+  H = cv.height = cv.clientHeight * devicePixelRatio;
+  CX = W / 2; CY = H / 2;
+  R = Math.min(W, H) * 0.21;
+}
+window.addEventListener("resize", resize);
+resize();
+
+const bars = new Array(96).fill(0);
+let t = 0;
+
+function lerp(a, b, k) { return a + (b - a) * k; }
+
+function draw() {
+  requestAnimationFrame(draw);
+  t += 0.016;
+  const tgt = STATES[state];
+  for (let i = 0; i < 3; i++) cur.color[i] = lerp(cur.color[i], tgt.color[i], 0.05);
+  cur.energy = lerp(cur.energy, tgt.energy, 0.05);
+  cur.spin = lerp(cur.spin, tgt.spin, 0.05);
+  const [r, g, b] = cur.color.map(Math.round);
+  const col = (a) => `rgba(${r},${g},${b},${a})`;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(CX, CY);
+
+  // faint grid rings
+  ctx.lineWidth = 1 * devicePixelRatio;
+  for (const k of [2.1, 1.75, 1.45]) {
+    ctx.beginPath(); ctx.arc(0, 0, R * k, 0, 7); ctx.strokeStyle = col(0.06); ctx.stroke();
+  }
+
+  // outer tick ring
+  ctx.strokeStyle = col(0.5);
+  for (let i = 0; i < 60; i++) {
+    const a = (i / 60) * Math.PI * 2 + t * 0.05;
+    const len = i % 5 === 0 ? 0.09 : 0.04;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * R * 1.28, Math.sin(a) * R * 1.28);
+    ctx.lineTo(Math.cos(a) * R * (1.28 + len), Math.sin(a) * R * (1.28 + len));
+    ctx.lineWidth = (i % 5 === 0 ? 2 : 1) * devicePixelRatio;
+    ctx.stroke();
+  }
+
+  // audio-style bars around the core (animate when speaking/listening)
+  const active = state === "speaking" ? 1 : state === "listening" ? 0.35 : 0.12;
+  for (let i = 0; i < bars.length; i++) {
+    const target = active * (0.3 + Math.abs(Math.sin(i * 1.7 + t * (state === "speaking" ? 9 : 2)))
+                   * Math.abs(Math.sin(i * 0.35 - t * 3)));
+    bars[i] = lerp(bars[i], target, 0.2);
+    const a = (i / bars.length) * Math.PI * 2;
+    const inner = R * 1.06, len = bars[i] * R * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+    ctx.lineTo(Math.cos(a) * (inner + len), Math.sin(a) * (inner + len));
+    ctx.strokeStyle = col(0.30 + bars[i] * 0.6);
+    ctx.lineWidth = 2 * devicePixelRatio;
+    ctx.stroke();
+  }
+
+  // rotating arc segments
+  const arcs = [
+    { r: R * 0.92, w: 5, speed: 1.0, from: 0.0, span: 1.9 },
+    { r: R * 0.80, w: 3, speed: -1.6, from: 2.1, span: 1.1 },
+    { r: R * 0.80, w: 3, speed: -1.6, from: 4.6, span: 0.7 },
+    { r: R * 1.00, w: 2, speed: 0.55, from: 3.6, span: 2.6 },
+  ];
+  for (const s of arcs) {
+    const off = t * s.speed * cur.spin;
+    ctx.beginPath();
+    ctx.arc(0, 0, s.r, s.from + off, s.from + off + s.span);
+    ctx.strokeStyle = col(0.75);
+    ctx.lineWidth = s.w * devicePixelRatio;
+    ctx.lineCap = "round";
+    ctx.shadowColor = col(0.9); ctx.shadowBlur = 12 * devicePixelRatio;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // core
+  const pulse = 0.85 + 0.15 * Math.sin(t * (2 + cur.energy * 4));
+  const coreR = R * 0.52 * pulse;
+  const grad = ctx.createRadialGradient(0, 0, coreR * 0.05, 0, 0, coreR);
+  grad.addColorStop(0, `rgba(235,250,255,${0.95 * cur.energy + 0.05})`);
+  grad.addColorStop(0.35, col(0.85));
+  grad.addColorStop(1, col(0));
+  ctx.beginPath(); ctx.arc(0, 0, coreR, 0, 7);
+  ctx.fillStyle = grad; ctx.fill();
+
+  // inner hex-ish polygon
+  ctx.beginPath();
+  for (let i = 0; i <= 6; i++) {
+    const a = (i / 6) * Math.PI * 2 - t * 0.3;
+    const x = Math.cos(a) * R * 0.34, y = Math.sin(a) * R * 0.34;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = col(0.55); ctx.lineWidth = 1.5 * devicePixelRatio; ctx.stroke();
+
+  ctx.restore();
+}
+draw();
+</script>
+</body>
+</html>

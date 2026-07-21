@@ -1,0 +1,9 @@
+# Jarvis — core dependencies
+anthropic>=0.116.0        # Claude brain (Opus 4.8) + MCP tool helpers
+fish-audio-sdk>=1.2.0     # Fish Audio streaming TTS (Jarvis's voice)
+faster-whisper>=1.0.3     # local speech-to-text (Jarvis's ears)
+sounddevice>=0.4.7        # mic capture + speaker playback
+numpy>=1.26               # audio buffers / VAD
+mcp>=1.2.0                # Model Context Protocol client (Higgsfield & friends)
+python-dotenv>=1.0.1      # load API keys from .env
+aiohttp>=3.9            # HUD web server (Jarvis's visual face)
