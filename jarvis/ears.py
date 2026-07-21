@@ -33,15 +33,22 @@ class Listener:
         self.model = WhisperModel(whisper_model, device="auto", compute_type="auto")
         print("[ears] ready.")
 
-    def listen(self) -> str:
-        """Record one utterance from the mic and return its transcription."""
-        audio = self._record_utterance()
+    def listen(self, threshold: float | None = None, quiet: bool = False) -> str:
+        """Record one utterance from the mic and return its transcription.
+
+        `threshold` overrides the energy threshold for this call — used to
+        listen less sensitively while Jarvis himself is talking (barge-in).
+        """
+        audio = self._record_utterance(threshold, quiet)
         if audio is None or len(audio) < self.sample_rate // 4:  # < 0.25s — noise
             return ""
         segments, _info = self.model.transcribe(audio, language=None, vad_filter=True)
         return " ".join(seg.text.strip() for seg in segments).strip()
 
-    def _record_utterance(self) -> np.ndarray | None:
+    def _record_utterance(
+        self, threshold: float | None = None, quiet: bool = False
+    ) -> np.ndarray | None:
+        threshold = threshold if threshold is not None else self.silence_threshold
         block_s = 0.05
         block_frames = int(self.sample_rate * block_s)
         q: queue.Queue[np.ndarray] = queue.Queue()
@@ -62,7 +69,8 @@ class Listener:
             blocksize=block_frames,
             callback=callback,
         ):
-            print("\n[ears] listening... (speak now)")
+            if not quiet:
+                print("\n[ears] listening... (speak now)")
             total = 0
             while total < max_blocks:
                 block = q.get()
@@ -70,12 +78,12 @@ class Listener:
                 level = float(np.sqrt(np.mean(block**2)))
 
                 if not speaking:
-                    if level >= self.silence_threshold:
+                    if level >= threshold:
                         speaking = True
                         chunks.append(block)
                 else:
                     chunks.append(block)
-                    if level < self.silence_threshold:
+                    if level < threshold:
                         silent_blocks += 1
                         if silent_blocks >= silence_limit:
                             break
@@ -84,5 +92,6 @@ class Listener:
 
         if not chunks:
             return None
-        print("[ears] transcribing...")
+        if not quiet:
+            print("[ears] transcribing...")
         return np.concatenate(chunks)

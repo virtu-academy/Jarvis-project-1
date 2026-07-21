@@ -26,6 +26,10 @@ voice, so:
   briefly narrate what you're doing while you work.
 - If you don't know something or a tool fails, say so plainly and suggest
   a next step.
+- You have long-term memory: use the save_memory tool when the user shares
+  something worth remembering across sessions (their name, preferences,
+  ongoing projects), and forget_memory when asked to forget. Anything in
+  your memory section was saved in a previous session — use it naturally.
 """
 
 
@@ -42,6 +46,25 @@ class Config:
     # Audio settings
     mic_sample_rate: int = 16_000     # what Whisper expects
     tts_sample_rate: int = 44_100     # Fish Audio PCM output rate
+
+    # Wake word & barge-in
+    wake_words: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            w.strip().lower()
+            for w in os.environ.get("WAKE_WORDS", "jarvis").split(",")
+            if w.strip()
+        )
+    )
+    # After Jarvis replies, follow-ups within this window don't need the wake word.
+    follow_up_window_s: float = field(
+        default_factory=lambda: float(os.environ.get("FOLLOW_UP_WINDOW", "25"))
+    )
+    # While Jarvis is talking, require this much louder input to register
+    # (crude echo rejection for barge-in).
+    barge_in_threshold_multiplier: float = 4.0
+
+    # Long-term memory file
+    memory_path: Path = field(default_factory=lambda: PROJECT_ROOT / "jarvis_memory.json")
 
     def validate(self, need_voice: bool = True) -> list[str]:
         problems = []
