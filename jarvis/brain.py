@@ -18,10 +18,17 @@ from .memory import MemoryStore
 
 
 class Brain:
-    def __init__(self, config: Config, mcp: MCPManager, memory: MemoryStore):
+    def __init__(
+        self,
+        config: Config,
+        mcp: MCPManager,
+        memory: MemoryStore,
+        notify: Callable[..., None] | None = None,
+    ):
         self.config = config
         self.mcp = mcp
         self.memory = memory
+        self.notify = notify or (lambda *a, **k: None)  # e.g. HUD.emit
         self.client = AsyncAnthropic(api_key=config.anthropic_api_key)
         self.messages: list[dict[str, Any]] = []
 
@@ -73,6 +80,7 @@ class Brain:
                     if block.type != "tool_use":
                         continue
                     print(f"\n[brain] calling tool: {block.name}")
+                    self.notify("tool", name=block.name)
                     try:
                         if self.memory.is_memory_tool(block.name):
                             result = self.memory.handle(block.name, block.input)

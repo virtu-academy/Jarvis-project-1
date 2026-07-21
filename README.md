@@ -9,6 +9,7 @@ A local, voice-driven AI assistant in the spirit of Tony Stark's JARVIS.
 - **Wake word** — always listening, but only answers when you say **"Jarvis"** (configurable via `WAKE_WORDS`); after he replies you get a follow-up window (default 25s) where no wake word is needed
 - **Barge-in** — say his name while he's talking and he stops mid-sentence to listen
 - **Memory** — long-term memory across sessions (`jarvis_memory.json`, kept local): tell him your preferences once and he remembers; ask him to forget and he does
+- **HUD** — an Iron-Man-style visual opens in your browser: a glowing arc-reactor core that reacts to his state (standing by / listening / processing / speaking) plus a live transcript. Disable with `--no-hud`.
 
 ## Setup
 
@@ -61,6 +62,8 @@ jarvis/
   ears.py        # mic capture + VAD + whisper STT
   voice.py       # Fish Audio TTS with sentence-streaming, interruptible playback
   memory.py      # long-term memory store + save/forget tools
+  hud.py         # local web server pushing live state to the visual HUD
+  static/hud.html# the HUD itself (arc reactor + transcript, canvas animation)
   mcp_client.py  # generic MCP server manager
   config.py      # .env loading + Jarvis system prompt
 mcp_servers.json # which MCP servers to connect to
