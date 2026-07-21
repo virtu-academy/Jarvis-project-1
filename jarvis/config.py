@@ -67,9 +67,19 @@ class Config:
     memory_path: Path = field(default_factory=lambda: PROJECT_ROOT / "jarvis_memory.json")
 
     def validate(self, need_voice: bool = True) -> list[str]:
+        def unset(value: str) -> bool:
+            v = value.strip()
+            return not v or v.endswith("...") or v == "REPLACE-ME"
+
         problems = []
-        if not self.anthropic_api_key:
-            problems.append("ANTHROPIC_API_KEY is not set (Jarvis has no brain).")
-        if need_voice and not self.fish_api_key:
-            problems.append("FISH_AUDIO_API_KEY is not set (Jarvis has no voice).")
+        if unset(self.anthropic_api_key):
+            problems.append(
+                "ANTHROPIC_API_KEY is not set (or still the placeholder) — "
+                "Jarvis has no brain. Get a key at platform.claude.com."
+            )
+        if need_voice and unset(self.fish_api_key):
+            problems.append(
+                "FISH_AUDIO_API_KEY is not set (or still the placeholder) — "
+                "Jarvis has no voice. Get a key at fish.audio."
+            )
         return problems

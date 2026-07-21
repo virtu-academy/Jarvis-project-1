@@ -25,6 +25,8 @@ import re
 import sys
 import time
 
+import anthropic
+
 from .brain import Brain
 from .config import PROJECT_ROOT, Config
 from .mcp_client import MCPManager
@@ -200,10 +202,30 @@ async def run(text_mode: bool, silent: bool, no_hud: bool) -> None:
                 speaker.feed(delta)
                 hud.emit("delta", text=delta)
 
-            full_text = await brain.respond(command, on_text)
-            speaker.flush()
-            print()
-            hud.emit("jarvis_done", text=full_text)
+            try:
+                full_text = await brain.respond(command, on_text)
+                speaker.flush()
+                print()
+                hud.emit("jarvis_done", text=full_text)
+            except anthropic.AuthenticationError:
+                msg = (
+                    "I'm afraid my Anthropic API key was rejected, sir. "
+                    "Please check ANTHROPIC_API_KEY in the .env file — it should "
+                    "be the full key from platform.claude.com, with no quotes or spaces."
+                )
+                print(f"\n[error] {msg}")
+                hud.emit("jarvis", text=msg)
+                speaker.say(msg)
+            except anthropic.APIConnectionError:
+                msg = "I can't reach the Anthropic API, sir — check your internet connection."
+                print(f"\n[error] {msg}")
+                hud.emit("jarvis", text=msg)
+                speaker.say(msg)
+            except anthropic.APIStatusError as e:
+                msg = f"The Anthropic API returned an error ({e.status_code}). I'll remain online, sir."
+                print(f"\n[error] {msg}\n{e.message}")
+                hud.emit("jarvis", text=msg)
+                speaker.say(msg)
             last_exchange = time.time()
     except (KeyboardInterrupt, EOFError):
         print("\n[jarvis] interrupted — shutting down.")
